@@ -1,0 +1,41 @@
+{
+  "name": "bb-plugin-dictation-shortcuts",
+  "version": "0.2.1",
+  "type": "module",
+  "engines": {
+    "bb": ">=0.46.1",
+    "bbPluginSdk": ">=0.6.49"
+  },
+  "bb": {
+    "name": "Dictation Shortcuts",
+    "description": "Hold Space to dictate with BB native voice input; Enter finishes, Escape cancels, with button and modifier hints.",
+    "branding": {
+      "icon": "./assets/icon.svg"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "0.6.49",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0",
+    "sonner": "^1.7.4",
+    "tsx": "^4.20.0",
+    "jsdom": "^26.0.0",
+    "@types/jsdom": "^21.1.7"
+  },
+  "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "bb plugin build"
+  },
+  "license": "MIT",
+  "author": "Artur Karapetyan",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/architawr/bb-plugin-dictation-shortcuts.git"
+  }
+}

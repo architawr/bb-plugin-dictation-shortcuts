@@ -1,4 +1,5 @@
-// Narrow adapter to native BB recorder controls. Never target Send.
+// Narrow adapter to native BB recorder controls. Only BB's own "Send voice input"
+// recorder button is used, and only for Enter while Space is held; never the composer Send.
 export const ROOT = '[data-app-composer]';
 const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-promptbox-typeahead-menu]';
 export function visible(element: HTMLElement): boolean {
@@ -30,7 +31,10 @@ export interface KeyboardOptions {
 export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () => void {
   let swallowedEnter = false;
   let swallowSpaceUp = false;
-  let hold: { root: HTMLElement; started: boolean; released: boolean; cancel: boolean } | null = null;
+  // finish: draft (release Space) < send (Enter while holding) < cancel (Escape).
+  type Finish = 'draft' | 'send' | 'cancel';
+  const rank: Record<Finish, number> = { draft: 0, send: 1, cancel: 2 };
+  let hold: { root: HTMLElement; started: boolean; released: boolean; finish: Finish } | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const blockedByOverlay = () => Array.from(doc.querySelectorAll<HTMLElement>(OVERLAY)).some(visible);
   const consume = (e: KeyboardEvent) => { e.preventDefault(); e.stopImmediatePropagation(); };
@@ -51,16 +55,19 @@ export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () 
     if (!hold) return;
     if (!hold.root.isConnected) { hold = null; clearTimer(); return; }
     if (!hold.started || !hold.released) return;
-    const target = hold.cancel
+    const target = hold.finish === 'cancel'
       ? voiceButton(hold.root, 'Cancel recording') || voiceButton(hold.root, 'Cancel transcription')
-      : voiceButton(hold.root, 'Stop and add to draft');
+      : hold.finish === 'send'
+        ? voiceButton(hold.root, 'Send voice input') || voiceButton(hold.root, 'Stop and add to draft')
+        : voiceButton(hold.root, 'Stop and add to draft');
     if (target) { hold = null; target.click(); }
   };
-  const releaseHold = (cancel: boolean) => {
+  const releaseHold = (finish: Finish) => {
     clearTimer();
     if (!hold) return;
     if (!hold.started) { hold = null; return; }
-    hold.released = true; hold.cancel ||= cancel;
+    hold.released = true;
+    if (rank[finish] > rank[hold.finish]) hold.finish = finish;
     settleHold();
   };
   const observer = new doc.defaultView!.MutationObserver(settleHold);
@@ -76,8 +83,9 @@ export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () 
   const down = (e: KeyboardEvent) => {
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && swallowedEnter) { consume(e); return; }
-    if (hold && e.key === 'Escape') { consume(e); releaseHold(true); return; }
-    if (hold?.started && e.key === 'Enter') { consume(e); swallowedEnter = true; releaseHold(false); return; }
+    if (hold && e.key === 'Escape') { consume(e); releaseHold('cancel'); return; }
+    // Enter while Space is held: stop, transcribe and send in one step via BB's recorder.
+    if (hold?.started && e.key === 'Enter') { consume(e); swallowedEnter = true; releaseHold('send'); return; }
     if (e.key === ' ' && swallowSpaceUp) { consume(e); return; }
     if (hold && !hold.started && e.key !== ' ') flushTap();
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || blockedByOverlay()) return;
@@ -87,9 +95,9 @@ export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () 
       const root = editor?.closest<HTMLElement>(ROOT);
       if (!root || activeVoice(root) || !voiceButton(root, 'Start voice input')) return;
       consume(e); swallowSpaceUp = true;
-      hold = { root, started: false, released: false, cancel: false };
+      hold = { root, started: false, released: false, finish: 'draft' };
       timer = setTimeout(() => {
-        if (!hold || !visible(root) || blockedByOverlay()) { releaseHold(true); return; }
+        if (!hold || !visible(root) || blockedByOverlay()) { releaseHold('cancel'); return; }
         const start = voiceButton(root, 'Start voice input');
         if (!start) { flushTap(); return; }
         hold.started = true;
@@ -112,11 +120,11 @@ export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () 
     if (e.key === 'Enter') swallowedEnter = false;
     if (e.key === ' ' && swallowSpaceUp) {
       consume(e); swallowSpaceUp = false;
-      if (hold?.started) releaseHold(false); else flushTap();
+      if (hold?.started) releaseHold('draft'); else flushTap();
     }
   };
-  const blur = () => { swallowedEnter = false; swallowSpaceUp = false; releaseHold(false); };
-  const pointer = () => { if (hold && !hold.started) flushTap(); else releaseHold(false); };
+  const blur = () => { swallowedEnter = false; swallowSpaceUp = false; releaseHold('draft'); };
+  const pointer = () => { if (hold && !hold.started) flushTap(); else releaseHold('draft'); };
   const hidden = () => { if (doc.hidden) blur(); };
   doc.addEventListener('keydown', down, true);
   doc.addEventListener('keyup', up, true);
@@ -124,7 +132,7 @@ export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () 
   doc.addEventListener('visibilitychange', hidden);
   doc.defaultView?.addEventListener('blur', blur);
   return () => {
-    releaseHold(true); hold = null; observer.disconnect();
+    releaseHold('cancel'); hold = null; observer.disconnect();
     doc.removeEventListener('keydown', down, true);
     doc.removeEventListener('keyup', up, true);
     doc.removeEventListener('pointerdown', pointer, true);

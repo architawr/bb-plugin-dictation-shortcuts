@@ -120,3 +120,27 @@ test('Escape before permission resolves remains cancel after Space release',asyn
  f.key('Escape');f.key(' ',{},f.editor,'keyup');f.controls('Cancel recording','Stop and add to draft');await pause();
  assert.deepEqual(f.clicks,['Start voice input','Cancel recording']);f.dispose();f.dom.window.close();
 });
+test('Enter while holding Space stops and sends via native recorder; release adds nothing', async () => {
+  const f=fixture(); f.controls('Start voice input'); f.key(' '); await pause();
+  f.controls('Cancel recording','Stop and add to draft','Send voice input');
+  assert.equal(f.key('Enter').defaultPrevented,true);
+  f.controls('Cancel transcription');
+  assert.equal(f.key('Enter',{repeat:true}).defaultPrevented,true);
+  f.key(' ',{},f.editor,'keyup'); f.key('Enter',{},f.editor,'keyup');
+  assert.deepEqual(f.clicks,['Start voice input','Send voice input']);assert.deepEqual(f.spaces,[]);f.dispose();f.dom.window.close();
+});
+test('Enter before microphone is ready sends once recording controls appear', async () => {
+  const f=fixture(); f.controls('Start voice input'); f.key(' '); await pause();
+  f.key('Enter'); f.key(' ',{},f.editor,'keyup');
+  f.controls('Cancel recording','Stop and add to draft','Send voice input'); await pause();
+  assert.deepEqual(f.clicks,['Start voice input','Send voice input']);f.dispose();f.dom.window.close();
+});
+test('Escape after Enter in held dictation still cancels', async () => {
+  const f=fixture(); f.controls('Start voice input'); f.key(' '); await pause();
+  f.key('Enter'); f.key('Escape'); f.controls('Cancel recording','Stop and add to draft','Send voice input'); await pause();
+  assert.deepEqual(f.clicks,['Start voice input','Cancel recording']);f.dispose();f.dom.window.close();
+});
+test('toggle-started recording: Enter still only adds to draft', () => {
+  const f=fixture(); f.controls('Cancel recording','Stop and add to draft','Send voice input'); f.key('Enter');
+  assert.deepEqual(f.clicks,['Stop and add to draft']);f.dispose();f.dom.window.close();
+});

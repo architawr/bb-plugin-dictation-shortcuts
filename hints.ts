@@ -17,7 +17,7 @@ export function mountHints(doc: Document, getConfig: () => Promise<Config | unde
   const tooltipStyles = new Map<HTMLElement, string>();
   const pillClass = 'pointer-events-none inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-sm bg-state-hover px-1.5 py-1 font-sans text-xs font-normal leading-none tabular-nums text-subtle-foreground opacity-60';
   const labels: Record<string, { hint: string; title: string; aria: string }> = {
-    'Start voice input': { hint: 'Space', title: 'Hold Space to dictate · Release to finish', aria: 'Space' },
+    'Start voice input': { hint: 'Space', title: 'Hold Space to dictate · Release to finish · Enter while holding sends', aria: 'Space' },
     'Stop and add to draft': { hint: 'Enter', title: 'Finish dictation and add to draft · Enter / release Space', aria: 'Enter' },
     'Cancel recording': { hint: 'Esc', title: 'Cancel recording · Escape', aria: 'Escape' },
     'Cancel transcription': { hint: 'Esc', title: 'Cancel transcription · Escape', aria: 'Escape' },
@@ -65,7 +65,7 @@ export function mountHints(doc: Document, getConfig: () => Promise<Config | unde
         : label === 'Stop and add to draft' ? 'Add to draft' : null;
       if (!expected) continue;
       const replacement = label === 'Start voice input'
-        ? `Hold Space to dictate; release to finish${toggle ? `\nToggle: ${toggle}` : ''}\nRight-click for voice preferences`
+        ? `Hold Space to dictate; release to finish\nPress Enter while holding to send${toggle ? `\nToggle: ${toggle}` : ''}\nRight-click for voice preferences`
         : 'Finish and add to draft · Enter';
       for (const id of (b.getAttribute('aria-describedby') ?? '').split(/\s+/)) {
         const accessible = doc.getElementById(id);

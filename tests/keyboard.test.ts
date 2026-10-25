@@ -144,3 +144,34 @@ test('toggle-started recording: Enter still only adds to draft', () => {
   const f=fixture(); f.controls('Cancel recording','Stop and add to draft','Send voice input'); f.key('Enter');
   assert.deepEqual(f.clicks,['Stop and add to draft']);f.dispose();f.dom.window.close();
 });
+test('click outside during hold: focus returns to composer after transcript lands', async () => {
+  const f=fixture(); f.controls('Start voice input'); f.key(' '); await pause();
+  f.controls('Cancel recording','Stop and add to draft');
+  f.doc.body.dispatchEvent(new f.dom.window.Event('pointerdown', { bubbles: true }));
+  f.editor.blur(); f.controls('Cancel transcription'); await pause();
+  assert.notEqual(f.doc.activeElement, f.editor);
+  f.controls('Start voice input'); await pause();
+  assert.equal(f.doc.activeElement, f.editor);
+  assert.deepEqual(f.clicks,['Start voice input','Stop and add to draft']);f.dispose();f.dom.window.close();
+});
+test('window blur during hold refocuses the composer when transcription ends', async () => {
+  const f=fixture(); f.controls('Start voice input'); f.key(' '); await pause();
+  f.controls('Cancel recording','Stop and add to draft');
+  f.dom.window.dispatchEvent(new f.dom.window.Event('blur'));
+  f.editor.blur(); f.controls('Start voice input'); await pause();
+  assert.equal(f.doc.activeElement, f.editor);f.dispose();f.dom.window.close();
+});
+test('click into another field during hold keeps focus there', async () => {
+  const f=fixture(); f.controls('Start voice input'); f.key(' '); await pause();
+  f.controls('Cancel recording','Stop and add to draft');
+  const other=f.doc.querySelector<HTMLInputElement>('#other')!;
+  other.dispatchEvent(new f.dom.window.Event('pointerdown', { bubbles: true })); other.focus();
+  f.controls('Start voice input'); await pause();
+  assert.equal(f.doc.activeElement, other);f.dispose();f.dom.window.close();
+});
+test('normal Space release does not move focus', async () => {
+  const f=fixture(); f.controls('Start voice input'); f.key(' '); await pause();
+  f.controls('Cancel recording','Stop and add to draft'); f.key(' ',{},f.editor,'keyup');
+  f.editor.blur(); f.controls('Start voice input'); await pause();
+  assert.notEqual(f.doc.activeElement, f.editor);f.dispose();f.dom.window.close();
+});

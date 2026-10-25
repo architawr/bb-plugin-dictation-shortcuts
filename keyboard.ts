@@ -26,6 +26,7 @@ export function toggleNativeVoice(root: HTMLElement): boolean {
 }
 export interface KeyboardOptions {
   insertSpace?: (root: HTMLElement) => void;
+  focusComposer?: (root: HTMLElement) => void;
   holdDelayMs?: number;
 }
 export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () => void {
@@ -70,7 +71,31 @@ export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () 
     if (rank[finish] > rank[hold.finish]) hold.finish = finish;
     settleHold();
   };
-  const observer = new doc.defaultView!.MutationObserver(settleHold);
+  // A click or window switch interrupts the hold and leaves focus outside the
+  // composer; once the transcript lands in the draft, put the caret back so Enter sends.
+  let refocus: HTMLElement | null = null;
+  const textEntry = (el: Element | null) => !!el?.closest('input, textarea, select, [contenteditable="true"]');
+  const focusComposer = (root: HTMLElement) => {
+    if (options.focusComposer) options.focusComposer(root);
+    else root.querySelector<HTMLElement>('[contenteditable="true"], textarea')?.focus();
+  };
+  const settleRefocus = () => {
+    const root = refocus;
+    if (!root) return;
+    if (!root.isConnected) { refocus = null; return; }
+    if (hold?.root === root || activeVoice(root)) return;
+    // The user moved on to another field (or is already back in the editor): leave it.
+    if (textEntry(doc.activeElement)) { refocus = null; return; }
+    setTimeout(() => {
+      if (refocus !== root || !root.isConnected || activeVoice(root) || textEntry(doc.activeElement)) return;
+      refocus = null; focusComposer(root);
+    }, 0);
+  };
+  const interrupt = () => {
+    if (hold?.started) refocus = hold.root;
+    releaseHold('draft');
+  };
+  const observer = new doc.defaultView!.MutationObserver(() => { settleHold(); settleRefocus(); });
   observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'disabled'] });
   const rootForEvent = (event: KeyboardEvent): HTMLElement | null => {
     const target = event.target instanceof doc.defaultView!.Element ? event.target : null;
@@ -123,8 +148,8 @@ export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () 
       if (hold?.started) releaseHold('draft'); else flushTap();
     }
   };
-  const blur = () => { swallowedEnter = false; swallowSpaceUp = false; releaseHold('draft'); };
-  const pointer = () => { if (hold && !hold.started) flushTap(); else releaseHold('draft'); };
+  const blur = () => { swallowedEnter = false; swallowSpaceUp = false; interrupt(); };
+  const pointer = () => { if (hold && !hold.started) flushTap(); else interrupt(); };
   const hidden = () => { if (doc.hidden) blur(); };
   doc.addEventListener('keydown', down, true);
   doc.addEventListener('keyup', up, true);
@@ -132,7 +157,7 @@ export function mountKeyboard(doc: Document, options: KeyboardOptions = {}): () 
   doc.addEventListener('visibilitychange', hidden);
   doc.defaultView?.addEventListener('blur', blur);
   return () => {
-    releaseHold('cancel'); hold = null; observer.disconnect();
+    releaseHold('cancel'); hold = null; refocus = null; observer.disconnect();
     doc.removeEventListener('keydown', down, true);
     doc.removeEventListener('keyup', up, true);
     doc.removeEventListener('pointerdown', pointer, true);

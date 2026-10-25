@@ -6,6 +6,7 @@ import { mountKeyboard, toggleNativeVoice } from "./keyboard";
 
 const roots = new Map<string, HTMLElement>();
 const spaceInserters = new Map<HTMLElement, () => void>();
+const focusers = new Map<HTMLElement, () => void>();
 let readConfig: (() => ReturnType<ReturnType<typeof useSdk>["system"]["config"]>) | undefined;
 function ComposerAnchor() {
   const composer = useComposer();
@@ -16,8 +17,9 @@ function ComposerAnchor() {
     if (!root) return;
     roots.set(composer.key, root);
     spaceInserters.set(root, () => composer.insert(" "));
+    focusers.set(root, () => composer.focus());
     readConfig = () => sdk.system.config();
-    return () => { if (roots.get(composer.key) === root) roots.delete(composer.key); spaceInserters.delete(root); };
+    return () => { if (roots.get(composer.key) === root) roots.delete(composer.key); spaceInserters.delete(root); focusers.delete(root); };
   }, [composer, composer.key, sdk]);
   return <span ref={anchor} hidden aria-hidden="true" />;
 }
@@ -35,7 +37,10 @@ export default definePluginApp((app) => {
     },
   });
   app.contentScripts.register({ id: "dictation-keys", mount: () => {
-    const stopKeys = mountKeyboard(document, { insertSpace: root => spaceInserters.get(root)?.() });
+    const stopKeys = mountKeyboard(document, {
+      insertSpace: root => spaceInserters.get(root)?.(),
+      focusComposer: root => focusers.get(root)?.(),
+    });
     const stopHints = mountHints(document, async () => readConfig?.());
     return () => { stopKeys(); stopHints(); };
   } });
